@@ -35,6 +35,11 @@ export function TimeTracker() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newEntries));
   };
 
+  const saveProjects = (newProjects: Project[]) => {
+    setProjects(newProjects);
+    localStorage.setItem(PROJECTS_KEY, JSON.stringify(newProjects));
+  };
+
   if (!isLoaded) return null;
 
   return (
@@ -49,7 +54,7 @@ export function TimeTracker() {
       <div className="mt-8">
         {activeTab === 'log' && <LogTimePanel entries={entries} projects={projects} saveEntries={saveEntries} />}
         {activeTab === 'today' && <TodayPanel entries={entries} />}
-        {activeTab === 'projects' && <ProjectsPanel entries={entries} projects={projects} />}
+        {activeTab === 'projects' && <ProjectsPanel entries={entries} projects={projects} saveProjects={saveProjects} />}
         {activeTab === 'team' && <TeamPanel entries={entries} />}
         {activeTab === 'tasks' && <TaskAnalysisPanel entries={entries} />}
       </div>

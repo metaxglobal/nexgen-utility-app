@@ -69,8 +69,10 @@ export function TeamPanel({ entries }: { entries: Entry[] }) {
                     <div className="font-bold text-white">{r.s}</div>
                     <div className="text-[#CCFF33] font-medium">{r.hrs.toFixed(1)}h</div>
                     <div className="text-zinc-400">{r.count}</div>
-                    <div className="text-zinc-300 line-clamp-1 pr-4" title={r.projs.join(', ')}>
-                      {r.projs.length > 0 ? r.projs.slice(0,2).join(', ') + (r.projs.length>2?'…':'') : '-'}
+                    <div className="flex flex-wrap gap-1">
+                      {r.projs.length > 0 ? r.projs.map(p => (
+                        <span key={p} className="text-xs bg-zinc-800/50 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700/50">{p}</span>
+                      )) : <span className="text-zinc-500">-</span>}
                     </div>
                     <div className="text-xs text-zinc-400 bg-zinc-800/80 px-3 py-1 rounded-lg w-fit">
                       {r.topStage ? r.topStage[0] : '-'}
