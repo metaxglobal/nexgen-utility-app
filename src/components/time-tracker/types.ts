@@ -18,6 +18,11 @@ export interface Project {
   client?: string;
   status?: string;
   hours?: number[];
+  utilization?: number;
+  margin?: number;
+  finalPrice?: number;
+  estimatedCost?: number;
+  staffRates?: number[];
 }
 
 export const STAFF_NAMES = ['Sanjana','Senith','Sandun','Dasuni','Prageeth'];

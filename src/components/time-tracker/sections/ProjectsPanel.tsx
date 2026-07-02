@@ -20,6 +20,7 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
   const [editName, setEditName] = useState('');
   const [editClient, setEditClient] = useState('');
   const [editStatus, setEditStatus] = useState('');
+  const [showInactive, setShowInactive] = useState(false);
   if (projects.length === 0) {
     return (
       <div className="space-y-8">
@@ -29,10 +30,27 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
   }
 
   const activeProjects = projects.filter(p => ['Confirmed','In Progress'].includes(p.status || ''));
-  const toShow = activeProjects.length ? activeProjects : projects.slice(0, 10);
+  const inactiveProjects = projects.filter(p => !['Confirmed','In Progress'].includes(p.status || ''));
+  const toShow = showInactive ? inactiveProjects : activeProjects;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <div className="text-sm text-zinc-400 font-medium">
+          Showing {toShow.length} {showInactive ? 'inactive' : 'active'} projects
+        </div>
+        <button 
+          onClick={() => setShowInactive(!showInactive)}
+          className={`px-4 py-2 text-xs font-bold rounded-lg border transition-colors ${showInactive ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-white'}`}
+        >
+          {showInactive ? 'View Active Projects' : 'View Inactive Projects'}
+        </button>
+      </div>
+
+      {toShow.length === 0 && (
+        <AlertMessage type="info" msg={`No ${showInactive ? 'inactive' : 'active'} projects found.`} />
+      )}
+
       {toShow.map((p, i) => {
         const projEntries = entries.filter(e => e.projectId === p.id);
         const totalLogged = projEntries.reduce((a,e) => a+e.hours, 0);

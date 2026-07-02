@@ -158,12 +158,19 @@ export default function PriceCalculator() {
       const existing = localStorage.getItem('ngl_projects');
       const projects = existing ? JSON.parse(existing) : [];
       
+      const staffRates = STAFF.map(s => pureRate(s) + ohRateHr);
+
       const newProject = {
         id: 'proj_' + Date.now(),
         name: projectName.trim(),
         client: clientName.trim(),
         status: 'Confirmed',
-        hours: [...hours]
+        hours: [...hours],
+        utilization: utilSlider,
+        margin: marginSlider,
+        finalPrice: price,
+        estimatedCost: total,
+        staffRates: staffRates
       };
 
       projects.unshift(newProject);
@@ -314,23 +321,30 @@ export default function PriceCalculator() {
                     const diff = logged - est;
                     const pct = est > 0 ? Math.min((logged/est)*100, 100) : 0;
 
-                    let estCost = 0;
                     let actCost = 0;
 
-                    STAFF.forEach((s, idx) => {
-                      const staffEstH = p.hours ? p.hours[idx] || 0 : 0;
-                      const staffLoggedH = projEntries.filter(e => e.staff === s.name).reduce((acc, e) => acc + e.hours, 0);
+                    // Support legacy projects by falling back to dynamic rates
+                    const fallbackEstCost = p.hours ? p.hours.reduce((a:number,b:number,i:number)=>a+b*(pureRate(STAFF[i])+ohRateHr), 0) : 0;
+                    const estCost = p.estimatedCost ?? fallbackEstCost;
+                    const finalPrice = p.finalPrice ?? (fallbackEstCost > 0 ? fallbackEstCost / (1 - (marginSlider/100)) : 0);
 
-                      const staffRate = pureRate(s) + ohRateHr;
-                      estCost += staffEstH * staffRate;
+                    STAFF.forEach((s, idx) => {
+                      const staffLoggedH = projEntries.filter(e => e.staff === s.name).reduce((acc, e) => acc + e.hours, 0);
+                      const staffRate = p.staffRates ? p.staffRates[idx] : (pureRate(s) + ohRateHr);
                       actCost += staffLoggedH * staffRate;
                     });
 
                     const costDiff = actCost - estCost;
                     
                     return (
-                      <div key={p.id} className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-600 transition-colors flex flex-col">
-                        <div className="font-bold text-white mb-1 truncate">{p.name}</div>
+                      <div key={p.id} className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-600 transition-colors flex flex-col relative">
+                        {(p.utilization !== undefined || p.margin !== undefined) && (
+                          <div className="absolute top-4 right-4 flex gap-1">
+                            {p.utilization !== undefined && <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded border border-zinc-700">Util: {p.utilization}%</span>}
+                            {p.margin !== undefined && <span className="text-[10px] bg-zinc-800 text-[#CCFF33]/80 px-2 py-0.5 rounded border border-zinc-700">Margin: {p.margin}%</span>}
+                          </div>
+                        )}
+                        <div className="font-bold text-white mb-1 truncate pr-24">{p.name}</div>
                         <div className="text-xs text-zinc-500 mb-6 truncate">{p.client || 'No client'} <span className="mx-1">·</span> {p.status}</div>
                         
                         <div className="flex justify-between items-end mb-2">
@@ -342,7 +356,13 @@ export default function PriceCalculator() {
                         </div>
                         
                         <div className="flex-1 mt-4 pt-4 border-t border-zinc-800">
-                          <div className="space-y-2">
+                          <div className="space-y-3">
+                            {p.finalPrice !== undefined && (
+                              <div className="flex justify-between items-end pb-2 border-b border-zinc-800/50">
+                                <span className="text-xs text-zinc-400 font-medium">Quoted Price</span>
+                                <span className="text-sm font-bold text-[#CCFF33]">{fmt(finalPrice)}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between items-end">
                               <span className="text-xs text-zinc-500">Estimated Cost</span>
                               <span className="text-sm font-medium text-zinc-300">{fmt(estCost)}</span>
