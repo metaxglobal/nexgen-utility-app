@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Entry, Project, STAFF_NAMES } from '../types';
+import { Project, Entry, STAFF_NAMES } from '../types';
+import { api } from '@/lib/api';
 import { SectionWrapper } from '../../price-calculator/ui/SectionWrapper';
 import { SectionHeader } from '../../price-calculator/ui/SectionHeader';
 import { AlertMessage } from '../../price-calculator/ui/AlertMessage';
@@ -180,6 +181,7 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
               <button onClick={() => setDeleteModalId(null)} className="px-6 py-3 rounded-xl border border-zinc-700 text-white font-medium hover:bg-zinc-800 transition-colors">Cancel</button>
               <button onClick={() => {
                 saveProjects(projects.filter(x => x.id !== deleteModalId));
+                api.deleteProject(deleteModalId);
                 setDeleteModalId(null);
               }} className="px-6 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors">Delete Project</button>
             </div>
@@ -217,7 +219,9 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
               <button onClick={() => setEditModalProject(null)} className="px-6 py-3 rounded-xl border border-zinc-700 text-white font-medium hover:bg-zinc-800 transition-colors">Cancel</button>
               <button onClick={() => {
                 if (!editName.trim() || !editClient.trim()) return alert('Name and Client are required.');
-                saveProjects(projects.map(p => p.id === editModalProject.id ? { ...p, name: editName, client: editClient, status: editStatus } : p));
+                const updatedProj = { ...editModalProject, name: editName, client: editClient, status: editStatus };
+                saveProjects(projects.map(p => p.id === editModalProject.id ? updatedProj : p));
+                api.updateProject(updatedProj);
                 setEditModalProject(null);
               }} className="px-6 py-3 rounded-xl bg-[#CCFF33] text-black font-bold hover:bg-[#b3e62d] transition-colors shadow-[0_0_15px_rgba(204,255,51,0.3)]">Save Changes</button>
             </div>

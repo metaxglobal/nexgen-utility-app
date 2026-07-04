@@ -12,6 +12,8 @@ import { Clock01Icon } from "hugeicons-react";
 const STORAGE_KEY = 'ngl_time_entries';
 const PROJECTS_KEY = 'ngl_projects';
 
+import { api } from '@/lib/api';
+
 export function TimeTracker() {
   const [activeTab, setActiveTab] = useState('log');
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -19,25 +21,28 @@ export function TimeTracker() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    try {
-      const e = localStorage.getItem(STORAGE_KEY);
-      if (e) setEntries(JSON.parse(e));
-      const p = localStorage.getItem(PROJECTS_KEY);
-      if (p) setProjects(JSON.parse(p));
-    } catch (err) {
-      console.error(err);
+    async function loadData() {
+      try {
+        const [p, e] = await Promise.all([
+          api.getProjects(),
+          api.getEntries()
+        ]);
+        if (p) setProjects(p);
+        if (e) setEntries(e);
+      } catch (err) {
+        console.error("Failed to load from Google Sheets", err);
+      }
+      setIsLoaded(true);
     }
-    setIsLoaded(true);
+    loadData();
   }, []);
 
   const saveEntries = (newEntries: Entry[]) => {
     setEntries(newEntries);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newEntries));
   };
 
   const saveProjects = (newProjects: Project[]) => {
     setProjects(newProjects);
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(newProjects));
   };
 
   if (!isLoaded) return null;

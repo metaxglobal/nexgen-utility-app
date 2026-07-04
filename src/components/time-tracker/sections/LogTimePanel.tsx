@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Entry, Project, STAFF_NAMES, STAGES } from '../types';
+import { api } from '@/lib/api';
 import { SectionWrapper } from '../../price-calculator/ui/SectionWrapper';
 import { SectionHeader } from '../../price-calculator/ui/SectionHeader';
 import { AlertMessage } from '../../price-calculator/ui/AlertMessage';
@@ -62,9 +63,11 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
     
     if (editingId) {
       saveEntries(entries.map(e => e.id === editingId ? entry : e));
+      api.updateEntry(entry);
       showAlert(`Entry updated - ${Math.round(hours * 10) / 10} hr${hours !== 1 ? 's' : ''} logged for ${entry.projectName}.`, 'success');
     } else {
       saveEntries([entry, ...entries]);
+      api.saveEntry(entry);
       showAlert(`Entry saved - ${Math.round(hours * 10) / 10} hr${hours !== 1 ? 's' : ''} logged for ${entry.projectName}.`, 'success');
     }
     clearForm();
@@ -98,8 +101,9 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
   const confirmDelete = () => {
     if (deleteModalId !== null) {
       saveEntries(entries.filter(e => e.id !== deleteModalId));
+      api.deleteEntry(deleteModalId.toString());
       setDeleteModalId(null);
-      showAlert('Entry deleted successfully.', 'info');
+      showAlert('Entry successfully deleted.', 'success');
     }
   };
 

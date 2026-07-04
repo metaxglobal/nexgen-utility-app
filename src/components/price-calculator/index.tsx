@@ -41,6 +41,8 @@ const PRESETS: Record<string, number[]> = {
 const fmt = (n: number) => 'LKR ' + Math.round(n).toLocaleString();
 const fmtN = (n: number) => Math.round(n).toLocaleString();
 
+import { api } from '@/lib/api';
+
 export default function PriceCalculator() {
   const [projectName, setProjectName] = useState('');
   const [clientName, setClientName] = useState('');
@@ -57,12 +59,17 @@ export default function PriceCalculator() {
   const [historyPage, setHistoryPage] = useState(0);
 
   useEffect(() => {
-    try {
-      const p = localStorage.getItem('ngl_projects');
-      if (p) setPastProjects(JSON.parse(p));
-      const e = localStorage.getItem('ngl_time_entries');
-      if (e) setPastEntries(JSON.parse(e));
-    } catch (err) {}
+    async function load() {
+      try {
+        const [p, e] = await Promise.all([
+          api.getProjects(),
+          api.getEntries()
+        ]);
+        if (p) setPastProjects(p);
+        if (e) setPastEntries(e);
+      } catch (err) {}
+    }
+    load();
   }, []);
 
   const util = utilSlider / 100;
@@ -155,8 +162,7 @@ export default function PriceCalculator() {
 
   const confirmExport = () => {
     try {
-      const existing = localStorage.getItem('ngl_projects');
-      const projects = existing ? JSON.parse(existing) : [];
+      const projects = [...pastProjects];
       
       const staffRates = STAFF.map(s => pureRate(s) + ohRateHr);
 
@@ -174,7 +180,8 @@ export default function PriceCalculator() {
       };
 
       projects.unshift(newProject);
-      localStorage.setItem('ngl_projects', JSON.stringify(projects));
+      setPastProjects(projects);
+      api.saveProject(newProject);
       
       setExportModal(false);
       setExportSuccess(true);
