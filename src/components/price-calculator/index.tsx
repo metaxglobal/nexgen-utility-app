@@ -15,7 +15,7 @@ import { SectionWrapper } from './ui/SectionWrapper';
 
 const BILLABLE_MAX = 23 * 8;
 const OH = 175000;
-const TOTAL_MAX_CAP = 5 * BILLABLE_MAX;
+const TOTAL_MAX_CAP = 6 * BILLABLE_MAX;
 
 export interface StaffMember {
   name: string;
@@ -26,16 +26,17 @@ export interface StaffMember {
 const STAFF: StaffMember[] = [
   { name: 'Sanjana', role: 'Tech lead', salary: 148250 },
   { name: 'Senith', role: 'UI & UX designer', salary: 71000 },
+  { name: 'Sakuntha', role: 'UI & UX designer', salary: 71000 },
   { name: 'Sandun', role: 'Web developer', salary: 76000 },
   { name: 'Dasuni', role: 'BA & QA', salary: 71000 },
   { name: 'Prageeth', role: 'Web developer', salary: 92200 }
 ];
 
 const PRESETS: Record<string, number[]> = {
-  landing: [8, 12, 4, 4, 0],
-  brochure: [16, 24, 32, 8, 0],
-  ecommerce: [40, 40, 80, 24, 80],
-  webapp: [80, 40, 120, 60, 120]
+  landing: [8, 12, 0, 4, 4, 0],
+  brochure: [16, 24, 0, 32, 8, 0],
+  ecommerce: [40, 0, 80, 0, 24, 0],
+  webapp: [80, 40, 0, 120, 60, 120]
 };
 
 const fmt = (n: number) => 'LKR ' + Math.round(n).toLocaleString();
@@ -77,7 +78,7 @@ export default function PriceCalculator() {
   const billableHrs = Math.round(BILLABLE_MAX * util);
   const ohRateHr = OH / (TOTAL_MAX_CAP * util);
   
-  const totalBillCap = 5 * billableHrs;
+  const totalBillCap = STAFF.length * billableHrs;
   const minRevBreakeven = STAFF.reduce((a, s) => a + s.salary, 0) + OH;
 
   const pureRate = (s: StaffMember) => s.salary / (BILLABLE_MAX * util);

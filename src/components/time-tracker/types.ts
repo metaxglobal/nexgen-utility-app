@@ -25,7 +25,7 @@ export interface Project {
   staffRates?: number[];
 }
 
-export const STAFF_NAMES = ['Sanjana','Senith','Sandun','Dasuni','Prageeth'];
+export const STAFF_NAMES = ['Sanjana','Senith','Sakuntha','Sandun','Dasuni','Prageeth'];
 export const STAGES = [
   'Discovery & Planning', 'UI/UX Design', 'Frontend Development', 'Backend Development',
   'CMS Development', 'Database & API', 'Testing & QA', 'Bug Fixing', 'Client Review & Revisions',
