@@ -23,7 +23,8 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
   const [stage, setStage] = useState('');
   const [desc, setDesc] = useState('');
   const [hoursInput, setHoursInput] = useState<string>('');
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editModalEntry, setEditModalEntry] = useState<Entry | null>(null);
+  const [editHoursInput, setEditHoursInput] = useState<string>('');
   const [deleteModalId, setDeleteModalId] = useState<number | null>(null);
   const [alert, setAlert] = useState<{msg: string, type: 'success'|'warning'|'danger'|'info'} | null>(null);
 
@@ -31,6 +32,22 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
     const h = calcHours(start, end);
     if(h > 0) setHoursInput(h.toString());
   }, [start, end]);
+
+  useEffect(() => {
+    if (editModalEntry) {
+      const h = calcHours(editModalEntry.start, editModalEntry.end);
+      if(h > 0) setEditHoursInput(h.toString());
+    }
+  }, [editModalEntry?.start, editModalEntry?.end]);
+
+  useEffect(() => {
+    if (editModalEntry || deleteModalId) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [editModalEntry, deleteModalId]);
 
   const showAlert = (msg: string, type: 'success'|'warning'|'danger'|'info') => {
     setAlert({msg, type});
@@ -51,7 +68,7 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
     if (hours <= 0 || isNaN(hours)) { showAlert('Please enter a valid time range or hours.', 'warning'); return; }
 
     const entry: Entry = {
-      id: editingId || Date.now(),
+      id: Date.now(),
       staff, date,
       start: start || '', end: end || '',
       hours,
@@ -61,29 +78,36 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
       loggedAt: new Date().toISOString()
     };
     
-    if (editingId) {
-      saveEntries(entries.map(e => e.id === editingId ? entry : e));
-      api.updateEntry(entry);
-      showAlert(`Entry updated - ${Math.round(hours * 10) / 10} hr${hours !== 1 ? 's' : ''} logged for ${entry.projectName}.`, 'success');
-    } else {
-      saveEntries([entry, ...entries]);
-      api.saveEntry(entry);
-      showAlert(`Entry saved - ${Math.round(hours * 10) / 10} hr${hours !== 1 ? 's' : ''} logged for ${entry.projectName}.`, 'success');
-    }
+    saveEntries([entry, ...entries]);
+    api.saveEntry(entry);
+    showAlert(`Entry saved - ${Math.round(hours * 10) / 10} hr${hours !== 1 ? 's' : ''} logged for ${entry.projectName}.`, 'success');
     clearForm();
   };
 
+  const handleUpdate = () => {
+    if (!editModalEntry) return;
+    if (!editModalEntry.staff || !editModalEntry.date || !editModalEntry.projectId || !editModalEntry.stage || !editModalEntry.desc) {
+      showAlert('Please fill in all required fields.', 'warning'); return;
+    }
+    const hIn = parseFloat(editHoursInput);
+    const hours = hIn > 0 ? hIn : calcHours(editModalEntry.start, editModalEntry.end);
+    if (hours <= 0 || isNaN(hours)) { showAlert('Please enter a valid time range or hours.', 'warning'); return; }
+
+    const updatedEntry: Entry = {
+      ...editModalEntry,
+      hours,
+      projectName: getProjectName(editModalEntry.projectId)
+    };
+
+    saveEntries(entries.map(e => e.id === updatedEntry.id ? updatedEntry : e));
+    api.updateEntry(updatedEntry);
+    showAlert(`Entry updated successfully.`, 'success');
+    setEditModalEntry(null);
+  };
+
   const editEntry = (e: Entry) => {
-    setStaff(e.staff);
-    setDate(e.date);
-    setStart(e.start);
-    setEnd(e.end);
-    setProjectId(e.projectId);
-    setStage(e.stage);
-    setDesc(e.desc);
-    setHoursInput(e.hours.toString());
-    setEditingId(e.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setEditModalEntry({ ...e });
+    setEditHoursInput(e.hours.toString());
   };
 
   const clearForm = () => {
@@ -95,7 +119,6 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
     setDesc('');
     setDate(new Date().toISOString().split('T')[0]);
     setHoursInput('');
-    setEditingId(null);
   };
 
   const confirmDelete = () => {
@@ -178,9 +201,9 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
 
           <div className="flex justify-end gap-3 pt-4">
             <button onClick={clearForm} className="px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 hover:text-white transition-colors font-medium">Clear</button>
-            <button onClick={handleSave} className={`px-6 py-3 rounded-xl text-black text-sm font-bold shadow-[0_0_15px_rgba(204,255,51,0.3)] transition-all flex items-center gap-2 ${editingId ? 'bg-blue-400 hover:bg-blue-300 shadow-[0_0_15px_rgba(96,165,250,0.3)]' : 'bg-[#CCFF33] hover:bg-[#b3e62d]'}`}>
-              {editingId ? <Edit02Icon className="w-4 h-4" /> : <Clock01Icon className="w-4 h-4" />}
-              {editingId ? 'Update entry' : 'Add entry'}
+            <button onClick={handleSave} className="px-6 py-3 rounded-xl text-black text-sm font-bold shadow-[0_0_15px_rgba(204,255,51,0.3)] transition-all flex items-center gap-2 bg-[#CCFF33] hover:bg-[#b3e62d]">
+              <Clock01Icon className="w-4 h-4" />
+              Add entry
             </button>
           </div>
 
@@ -227,13 +250,86 @@ export function LogTimePanel({ entries, projects, saveEntries }: { entries: Entr
       </SectionWrapper>
 
       {deleteModalId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setDeleteModalId(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-2xl font-bold text-white mb-2">Delete Entry?</h3>
             <p className="text-zinc-400 mb-8">Are you sure you want to delete this time entry? This cannot be undone.</p>
             <div className="flex justify-end gap-4">
               <button onClick={() => setDeleteModalId(null)} className="px-6 py-3 rounded-xl border border-zinc-700 text-white font-medium hover:bg-zinc-800 transition-colors">Cancel</button>
               <button onClick={confirmDelete} className="px-6 py-3 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors">Delete Entry</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editModalEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setEditModalEntry(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-3xl w-full shadow-2xl overflow-y-auto max-h-[90vh] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]" onClick={e => e.stopPropagation()}>
+            <h3 className="text-2xl font-bold text-white mb-6">Edit Time Entry</h3>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className={labelClass}>Staff member <span className="text-red-500 ml-1">*</span></label>
+                  <select className={inputClass} value={editModalEntry.staff} onChange={e => setEditModalEntry({...editModalEntry, staff: e.target.value})}>
+                    <option value="">Select staff...</option>
+                    {STAFF_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Date <span className="text-red-500 ml-1">*</span></label>
+                  <input type="date" className={inputClass} value={editModalEntry.date} onChange={e => setEditModalEntry({...editModalEntry, date: e.target.value})} onClick={e => (e.target as any).showPicker?.()} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className={labelClass}>Start time</label>
+                  <input type="time" className={inputClass} value={editModalEntry.start} onChange={e => setEditModalEntry({...editModalEntry, start: e.target.value})} onClick={e => (e.target as any).showPicker?.()} />
+                </div>
+                <div>
+                  <label className={labelClass}>End time</label>
+                  <input type="time" className={inputClass} value={editModalEntry.end} onChange={e => setEditModalEntry({...editModalEntry, end: e.target.value})} onClick={e => (e.target as any).showPicker?.()} />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Project <span className="text-red-500 ml-1">*</span></label>
+                <select className={inputClass} value={editModalEntry.projectId} onChange={e => setEditModalEntry({...editModalEntry, projectId: e.target.value})}>
+                  <option value="">Select project...</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}{p.client ? ` - ${p.client}` : ''}</option>
+                  ))}
+                  {projects.length === 0 && <option value="__manual">No projects found - enter manually</option>}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className={labelClass}>Task stage <span className="text-red-500 ml-1">*</span></label>
+                  <select className={inputClass} value={editModalEntry.stage} onChange={e => setEditModalEntry({...editModalEntry, stage: e.target.value})}>
+                    <option value="">Select stage...</option>
+                    {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Hours (auto-calculated) <span className="text-red-500 ml-1">*</span></label>
+                  <input type="number" className={`${inputClass} ${editModalEntry.start && editModalEntry.end ? 'opacity-50 cursor-not-allowed' : ''}`} placeholder="0.0" step="0.25" min="0.25" max="24" value={editHoursInput} onChange={e => setEditHoursInput(e.target.value)} readOnly={!!(editModalEntry.start && editModalEntry.end)} />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Task description <span className="text-red-500 ml-1">*</span></label>
+                <input type="text" className={inputClass} placeholder="e.g. UI design of Hero section" value={editModalEntry.desc} onChange={e => setEditModalEntry({...editModalEntry, desc: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-4 mt-8">
+              <button onClick={() => setEditModalEntry(null)} className="px-6 py-3 rounded-xl border border-zinc-700 text-white font-medium hover:bg-zinc-800 transition-colors">Cancel</button>
+              <button onClick={handleUpdate} className="px-6 py-3 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-600 transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                <Edit02Icon className="w-4 h-4" />
+                Update Entry
+              </button>
             </div>
           </div>
         </div>

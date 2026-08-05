@@ -22,30 +22,54 @@ export function TimeTracker() {
 
   useEffect(() => {
     async function loadData() {
+      // 1. Instant load from local cache
+      const cachedProjects = localStorage.getItem('ngl_cache_projects');
+      const cachedEntries = localStorage.getItem('ngl_cache_entries');
+      
+      if (cachedProjects && cachedEntries) {
+        setProjects(JSON.parse(cachedProjects));
+        setEntries(JSON.parse(cachedEntries));
+        setIsLoaded(true); // Instant render!
+      }
+
+      // 2. Background sync with Google Sheets (1 request instead of 2)
       try {
-        const [p, e] = await Promise.all([
-          api.getProjects(),
-          api.getEntries()
-        ]);
-        if (p) setProjects(p);
-        if (e) setEntries(e);
+        const data = await api.getAllData();
+        if (data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
+          setProjects(data.projects);
+          localStorage.setItem('ngl_cache_projects', JSON.stringify(data.projects));
+        }
+        if (data.entries && Array.isArray(data.entries) && data.entries.length > 0) {
+          setEntries(data.entries);
+          localStorage.setItem('ngl_cache_entries', JSON.stringify(data.entries));
+        }
       } catch (err) {
         console.error("Failed to load from Google Sheets", err);
       }
-      setIsLoaded(true);
+      
+      if (!isLoaded) setIsLoaded(true);
     }
     loadData();
   }, []);
 
   const saveEntries = (newEntries: Entry[]) => {
     setEntries(newEntries);
+    localStorage.setItem('ngl_cache_entries', JSON.stringify(newEntries));
   };
 
   const saveProjects = (newProjects: Project[]) => {
     setProjects(newProjects);
+    localStorage.setItem('ngl_cache_projects', JSON.stringify(newProjects));
   };
 
-  if (!isLoaded) return null;
+  if (!isLoaded) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-32 space-y-4">
+        <div className="w-10 h-10 border-4 border-zinc-800 border-t-[#CCFF33] rounded-full animate-spin"></div>
+        <p className="text-zinc-400 font-medium">Syncing with Google Sheets...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full mx-auto space-y-12 pb-24 font-sans text-white">

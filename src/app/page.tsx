@@ -1,11 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PriceCalculator from "@/components/price-calculator";
 import { TimeTracker } from "@/components/time-tracker";
 
 export default function Home() {
   const [activeApp, setActiveApp] = useState<'price' | 'time'>('price');
+
+  useEffect(() => {
+    const handleNavigation = (e: any) => setActiveApp(e.detail);
+    window.addEventListener('ngl_navigate', handleNavigation);
+    return () => window.removeEventListener('ngl_navigate', handleNavigation);
+  }, []);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-50 pb-16">
