@@ -26,7 +26,7 @@ export interface StaffMember {
 const STAFF: StaffMember[] = [
   { name: 'Sanjana', role: 'Tech lead', salary: 148250 },
   { name: 'Senith', role: 'UI & UX designer', salary: 71000 },
-  { name: 'Sakuntha', role: 'UI & UX designer', salary: 71000 },
+  { name: 'Sakuntha', role: 'Creative designer', salary: 71000 },
   { name: 'Sandun', role: 'Web developer', salary: 76000 },
   { name: 'Dasuni', role: 'BA & QA', salary: 71000 },
   { name: 'Prageeth', role: 'Web developer', salary: 92200 }
@@ -53,6 +53,10 @@ export default function PriceCalculator() {
   
   const [exportModal, setExportModal] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+  
+  const [actualPriceInput, setActualPriceInput] = useState('');
+  const [projectType, setProjectType] = useState<'client' | 'inhouse'>('client');
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 
   const [pastProjects, setPastProjects] = useState<any[]>([]);
   const [pastEntries, setPastEntries] = useState<any[]>([]);
@@ -60,14 +64,49 @@ export default function PriceCalculator() {
   const [historyPage, setHistoryPage] = useState(0);
 
   useEffect(() => {
+    setHistoryPage(0);
+  }, [projectType, historySearch]);
+
+  useEffect(() => {
     async function load() {
+      // 1. Instant load from local cache
+      const cachedProjects = localStorage.getItem('ngl_cache_projects');
+      const cachedEntries = localStorage.getItem('ngl_cache_entries');
+      
+      if (cachedProjects && cachedEntries) {
+        const parsedProjects = JSON.parse(cachedProjects);
+        setPastProjects(parsedProjects);
+        setPastEntries(JSON.parse(cachedEntries));
+        
+        const editId = localStorage.getItem('ngl_edit_project_id');
+        if (editId) {
+          const p = parsedProjects.find((x: any) => x.id === editId);
+          if (p) {
+            setEditingProjectId(p.id);
+            setProjectName(p.name || '');
+            setClientName(p.client || '');
+            setProjectType(p.type === 'inhouse' ? 'inhouse' : 'client');
+            if (p.hours) setHours(p.hours);
+            if (p.utilization) setUtilSlider(p.utilization);
+            if (p.margin) setMarginSlider(p.margin);
+            if (p.actualPrice) setActualPriceInput(p.actualPrice.toString());
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          localStorage.removeItem('ngl_edit_project_id');
+        }
+      }
+
+      // 2. Background sync with Google Sheets
       try {
-        const [p, e] = await Promise.all([
-          api.getProjects(),
-          api.getEntries()
-        ]);
-        if (p) setPastProjects(p);
-        if (e) setPastEntries(e);
+        const data = await api.getAllData();
+        if (data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
+          setPastProjects(data.projects);
+          localStorage.setItem('ngl_cache_projects', JSON.stringify(data.projects));
+        }
+        if (data.entries && Array.isArray(data.entries) && data.entries.length > 0) {
+          setPastEntries(data.entries);
+          localStorage.setItem('ngl_cache_entries', JSON.stringify(data.entries));
+        }
       } catch (err) {}
     }
     load();
@@ -108,6 +147,7 @@ export default function PriceCalculator() {
     setHours(Array(STAFF.length).fill(0));
     setProjectName('');
     setClientName('');
+    setEditingProjectId(null);
   };
 
   const updateHour = (index: number, val: string) => {
@@ -150,11 +190,11 @@ export default function PriceCalculator() {
       alert("Please enter a Project Name in Section 01 before saving.");
       return;
     }
-    if (!clientName.trim()) {
+    if (projectType === 'client' && !clientName.trim()) {
       alert("Please enter a Client Name in Section 01 before saving.");
       return;
     }
-    if (totalHrs === 0) {
+    if (projectType === 'client' && totalHrs === 0) {
       alert("Please allocate some hours before saving the project.");
       return;
     }
@@ -163,12 +203,13 @@ export default function PriceCalculator() {
 
   const confirmExport = () => {
     try {
-      const projects = [...pastProjects];
+      let projects = [...pastProjects];
       
       const staffRates = STAFF.map(s => pureRate(s) + ohRateHr);
 
-      const newProject = {
-        id: 'proj_' + Date.now(),
+      const parsedActual = parseFloat(actualPriceInput);
+      const newProject = projectType === 'client' ? {
+        id: editingProjectId || ('proj_' + Date.now()),
         name: projectName.trim(),
         client: clientName.trim(),
         status: 'Confirmed',
@@ -176,17 +217,80 @@ export default function PriceCalculator() {
         utilization: utilSlider,
         margin: marginSlider,
         finalPrice: price,
+        actualPrice: isNaN(parsedActual) ? price : parsedActual,
         estimatedCost: total,
-        staffRates: staffRates
+        staffRates: staffRates,
+        type: 'client'
+      } : {
+        id: editingProjectId || ('proj_' + Date.now()),
+        name: projectName.trim(),
+        client: clientName.trim() || 'NexGen Labs',
+        status: 'Confirmed',
+        hours: STAFF.map(() => 0),
+        utilization: 0,
+        margin: 0,
+        finalPrice: 0,
+        actualPrice: 0,
+        estimatedCost: 0,
+        staffRates: [],
+        type: 'inhouse'
+      };
+
+      if (editingProjectId) {
+        projects = projects.map(p => p.id === editingProjectId ? newProject : p);
+        api.updateProject(newProject);
+      } else {
+        projects.unshift(newProject);
+        api.saveProject(newProject);
+      }
+      
+      setPastProjects(projects);
+      localStorage.setItem('ngl_cache_projects', JSON.stringify(projects));
+      
+      setEditingProjectId(null);
+      setExportModal(false);
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save project.");
+    }
+  };
+
+  const handleQuickDraft = () => {
+    if (!projectName.trim()) {
+      alert("Please enter a Project Name first.");
+      return;
+    }
+    if (projectType === 'client' && !clientName.trim()) {
+      alert("Please enter a Client Name first.");
+      return;
+    }
+    try {
+      let projects = [...pastProjects];
+      const newProject = {
+        id: 'proj_' + Date.now(),
+        name: projectName.trim(),
+        client: clientName.trim() || (projectType === 'inhouse' ? 'NexGen Labs' : ''),
+        status: 'Confirmed',
+        hours: STAFF.map(() => 0),
+        utilization: 0,
+        margin: 0,
+        finalPrice: 0,
+        actualPrice: 0,
+        estimatedCost: 0,
+        staffRates: [],
+        type: projectType
       };
 
       projects.unshift(newProject);
       setPastProjects(projects);
+      localStorage.setItem('ngl_cache_projects', JSON.stringify(projects));
       api.saveProject(newProject);
       
-      setExportModal(false);
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
+      handleReset();
     } catch (err) {
       console.error(err);
       alert("Failed to save project.");
@@ -200,6 +304,21 @@ export default function PriceCalculator() {
         <h2 className="text-3xl md:text-4xl font-black tracking-wide text-white uppercase">Project Pricing Calculator</h2>
       </div>
 
+      <div className="flex gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-xl w-fit">
+        <button
+          onClick={() => setProjectType('client')}
+          className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${projectType === 'client' ? 'bg-[#CCFF33] text-black shadow-lg shadow-[#CCFF33]/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+        >
+          Client Project
+        </button>
+        <button
+          onClick={() => setProjectType('inhouse')}
+          className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${projectType === 'inhouse' ? 'bg-[#CCFF33] text-black shadow-lg shadow-[#CCFF33]/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+        >
+          Inhouse Project
+        </button>
+      </div>
+
       <SectionWrapper stepNumber="01">
         <div className="space-y-4">
           <SectionHeader title="Project Details" description="Assign a name and client to your project." />
@@ -210,17 +329,34 @@ export default function PriceCalculator() {
               onChange={(e) => setProjectName(e.target.value)}
               placeholder="Enter project name…"
             />
-            <input 
-              className="w-full px-5 py-4 text-lg bg-zinc-900/50 border border-zinc-800 rounded-xl text-white outline-none focus:border-[#CCFF33] focus:ring-1 focus:ring-[#CCFF33] transition-all"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Enter client name…"
-            />
+            <div className="flex gap-2">
+              <input 
+                className="w-full px-5 py-4 text-lg bg-zinc-900/50 border border-zinc-800 rounded-xl text-white outline-none focus:border-[#CCFF33] focus:ring-1 focus:ring-[#CCFF33] transition-all"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder={projectType === 'inhouse' ? "Enter client name (Defaults to NexGen Labs)…" : "Enter client name…"}
+              />
+            </div>
           </div>
+          {projectType === 'client' && !editingProjectId && (
+            <div className="flex justify-end pt-2">
+              <button 
+                onClick={handleQuickDraft} 
+                className="px-5 py-2.5 rounded-xl border border-zinc-700 bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 hover:text-white transition-colors font-medium flex items-center gap-2"
+              >
+                Save as Quick Draft
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </SectionWrapper>
 
-      <SectionWrapper stepNumber="02">
+      {projectType === 'client' && (
+        <>
+          <SectionWrapper stepNumber="02">
         <UtilisationRate 
           utilSlider={utilSlider}
           setUtilSlider={setUtilSlider}
@@ -290,8 +426,10 @@ export default function PriceCalculator() {
           setMarginSlider={setMarginSlider}
         />
       </SectionWrapper>
+        </>
+      )}
 
-      <SectionWrapper stepNumber="06">
+      <SectionWrapper stepNumber={projectType === 'client' ? "06" : "02"}>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <SectionHeader title="Historical Reference" description="Review how past projects performed to estimate better." />
           
@@ -313,11 +451,14 @@ export default function PriceCalculator() {
           {pastProjects.length === 0 ? (
             <div className="text-center py-12 text-zinc-500 text-sm bg-zinc-900/50 rounded-2xl border border-zinc-800/50">No historical projects found. Export a project to the Time Tracker first.</div>
           ) : (() => {
-            const filtered = pastProjects.filter(p => p.name.toLowerCase().includes(historySearch.toLowerCase()));
+            const filtered = pastProjects.filter(p => 
+              p.name.toLowerCase().includes(historySearch.toLowerCase()) &&
+              ((projectType === 'inhouse') ? (p.type === 'inhouse') : (p.type !== 'inhouse'))
+            );
             const totalPages = Math.ceil(filtered.length / 3);
             const current = filtered.slice(historyPage * 3, (historyPage + 1) * 3);
 
-            if (filtered.length === 0) return <div className="text-zinc-500 text-sm py-8 text-center bg-zinc-900/50 rounded-2xl border border-zinc-800/50">No projects match your search.</div>;
+            if (filtered.length === 0) return <div className="text-zinc-500 text-sm py-8 text-center bg-zinc-900/50 rounded-2xl border border-zinc-800/50">No {projectType} projects match your search.</div>;
 
             return (
               <div className="space-y-6">
@@ -332,13 +473,17 @@ export default function PriceCalculator() {
                     let actCost = 0;
 
                     // Support legacy projects by falling back to dynamic rates
-                    const fallbackEstCost = p.hours ? p.hours.reduce((a:number,b:number,i:number)=>a+b*(pureRate(STAFF[i])+ohRateHr), 0) : 0;
+                    const fallbackEstCost = p.hours ? p.hours.reduce((a:number,b:number,i:number) => {
+                      const s = STAFF[i];
+                      const rate = s ? (pureRate(s) + ohRateHr) : 0;
+                      return a + (b * rate);
+                    }, 0) : 0;
                     const estCost = p.estimatedCost ?? fallbackEstCost;
                     const finalPrice = p.finalPrice ?? (fallbackEstCost > 0 ? fallbackEstCost / (1 - (marginSlider/100)) : 0);
 
                     STAFF.forEach((s, idx) => {
                       const staffLoggedH = projEntries.filter(e => e.staff === s.name).reduce((acc, e) => acc + e.hours, 0);
-                      const staffRate = p.staffRates ? p.staffRates[idx] : (pureRate(s) + ohRateHr);
+                      const staffRate = (p.staffRates && p.staffRates[idx] !== undefined) ? p.staffRates[idx] : (pureRate(s) + ohRateHr);
                       actCost += staffLoggedH * staffRate;
                     });
 
@@ -355,41 +500,69 @@ export default function PriceCalculator() {
                         <div className="font-bold text-white mb-1 truncate pr-24">{p.name}</div>
                         <div className="text-xs text-zinc-500 mb-6 truncate">{p.client || 'No client'} <span className="mx-1">·</span> {p.status}</div>
                         
-                        <div className="flex justify-between items-end mb-2">
-                          <span className="text-xs text-zinc-400">Total Hours</span>
-                          <span className="text-sm font-bold text-white">{logged.toFixed(1)}h / {est.toFixed(1)}h</span>
-                        </div>
-                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-4">
-                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: diff > 0 ? '#ef4444' : '#CCFF33' }}></div>
-                        </div>
-                        
-                        <div className="flex-1 mt-4 pt-4 border-t border-zinc-800">
-                          <div className="space-y-3">
-                            {p.finalPrice !== undefined && (
-                              <div className="flex justify-between items-end pb-2 border-b border-zinc-800/50">
-                                <span className="text-xs text-zinc-400 font-medium">Quoted Price</span>
-                                <span className="text-sm font-bold text-[#CCFF33]">{fmt(finalPrice)}</span>
-                              </div>
-                            )}
-                            <div className="flex justify-between items-end">
-                              <span className="text-xs text-zinc-500">Estimated Cost</span>
-                              <span className="text-sm font-medium text-zinc-300">{fmt(estCost)}</span>
+                        {p.type !== 'inhouse' ? (
+                          <>
+                            <div className="flex justify-between items-end mb-2">
+                              <span className="text-xs text-zinc-400">Total Hours</span>
+                              <span className="text-sm font-bold text-white">{logged.toFixed(1)}h / {est.toFixed(1)}h</span>
                             </div>
-                            <div className="flex justify-between items-end">
-                              <span className="text-xs text-zinc-500">Actual Cost</span>
-                              <span className={`text-sm font-medium ${costDiff > 0 ? 'text-red-400' : 'text-white'}`}>{fmt(actCost)}</span>
+                            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-4">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: diff > 0 ? '#ef4444' : '#CCFF33' }}></div>
                             </div>
                             
-                            {estCost > 0 && (
-                              <div className="flex justify-between items-end pt-2 mt-2 border-t border-zinc-800/50">
-                                <span className="text-xs text-zinc-500">Financial Variance</span>
-                                <span className={`text-xs font-bold px-2 py-1 rounded-md ${costDiff > 0 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
-                                  {costDiff > 0 ? `Over by ${fmt(costDiff)}` : `Saved ${fmt(Math.abs(costDiff))}`}
-                                </span>
+                            <div className="flex-1 mt-4 pt-4 border-t border-zinc-800">
+                              <div className="space-y-3">
+                                {p.finalPrice !== undefined && (
+                                  <div className="flex justify-between items-end pb-2 border-b border-zinc-800/50">
+                                    <span className="text-xs text-zinc-400 font-medium">{p.actualPrice ? 'System Quote' : 'Quoted Price'}</span>
+                                    <span className={`text-sm font-bold ${p.actualPrice ? 'text-zinc-500 line-through' : 'text-[#CCFF33]'}`}>{fmt(finalPrice)}</span>
+                                  </div>
+                                )}
+                                {p.actualPrice !== undefined && (
+                                  <div className="flex justify-between items-end pb-2 border-b border-zinc-800/50">
+                                    <span className="text-xs text-zinc-400 font-medium text-[#CCFF33]">Actual Given Price</span>
+                                    <span className="text-sm font-bold text-[#CCFF33]">{fmt(p.actualPrice)}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between items-end">
+                                  <span className="text-xs text-zinc-500">Estimated Cost</span>
+                                  <span className="text-sm font-medium text-zinc-300">{fmt(estCost)}</span>
+                                </div>
+                                <div className="flex justify-between items-end">
+                                  <span className="text-xs text-zinc-500">Actual Cost</span>
+                                  <span className={`text-sm font-medium ${costDiff > 0 ? 'text-red-400' : 'text-white'}`}>{fmt(actCost)}</span>
+                                </div>
+                                
+                                {estCost > 0 && (
+                                  <div className="flex justify-between items-end pt-2 mt-2 border-t border-zinc-800/50">
+                                    <span className="text-xs text-zinc-500">Financial Variance</span>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-md ${costDiff > 0 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
+                                      {costDiff > 0 ? `Over by ${fmt(costDiff)}` : `Saved ${fmt(Math.abs(costDiff))}`}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        </div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-end mb-2">
+                              <span className="text-xs text-zinc-400">Total Logged Hours</span>
+                              <span className="text-sm font-bold text-white">{logged.toFixed(1)}h</span>
+                            </div>
+                            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-4">
+                              <div className="h-full rounded-full transition-all bg-[#CCFF33]" style={{ width: '100%' }}></div>
+                            </div>
+                            <div className="flex-1 mt-4 pt-4 border-t border-zinc-800">
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-end">
+                                  <span className="text-xs text-zinc-500">Actual Cost (Staff Time)</span>
+                                  <span className="text-sm font-medium text-white">{fmt(actCost)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}
@@ -424,23 +597,42 @@ export default function PriceCalculator() {
         </div>
       </SectionWrapper>
 
-      <SectionWrapper stepNumber="07">
-        <FinalPrice 
-          price={price}
-          total={total}
-          profit={profit}
-          margin={margin}
-          rate={rate}
-          fmt={fmt}
-        />
-      </SectionWrapper>
+      {projectType === 'client' && (
+        <SectionWrapper stepNumber="07">
+          <FinalPrice 
+            price={price}
+            total={total}
+            profit={profit}
+            margin={margin}
+            rate={rate}
+            fmt={fmt}
+          />
+          
+          <div className="mt-8 bg-zinc-900/30 border border-[#CCFF33] rounded-2xl p-6 flex flex-col md:flex-row gap-6 items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-[#CCFF33] uppercase tracking-wider mb-1">Actual Given Price (Optional)</div>
+              <div className="text-sm text-zinc-400">Record what you actually quoted to the client vs system estimate.</div>
+            </div>
+            <div className="w-full md:w-auto flex items-center gap-3">
+              <span className="text-zinc-500 font-bold">LKR</span>
+              <input 
+                type="number"
+                className="w-full md:w-48 px-5 py-3 text-lg bg-zinc-900 border border-zinc-700 rounded-xl text-white outline-none focus:border-[#CCFF33] transition-all font-medium"
+                value={actualPriceInput}
+                onChange={(e) => setActualPriceInput(e.target.value)}
+                placeholder="e.g. 280000"
+              />
+            </div>
+          </div>
+        </SectionWrapper>
+      )}
 
       <div className="flex justify-end pt-4">
         <button 
           onClick={handleExportToTimeTracker}
           className="flex items-center gap-3 px-8 py-4 bg-[#CCFF33] text-black font-bold text-lg rounded-2xl hover:bg-[#b3e62d] transition-all shadow-[0_0_20px_rgba(204,255,51,0.3)] shrink-0"
         >
-          Export to Time Tracker
+          {editingProjectId ? 'Update Project in Time Tracker' : 'Export to Time Tracker'}
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
           </svg>

@@ -19,7 +19,7 @@ export function FinalPrice({ price, total, profit, margin, rate, fmt }: Props) {
       
       <div className="relative z-10 flex flex-col xl:flex-row justify-between items-start xl:items-end gap-8">
         <div>
-          <div className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Final client price</div>
+          <div className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Final client price (By System)</div>
           <div className="text-5xl md:text-7xl font-bold text-[#CCFF33] mb-10">{fmt(price)}</div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

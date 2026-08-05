@@ -21,14 +21,15 @@ export interface Project {
   utilization?: number;
   margin?: number;
   finalPrice?: number;
+  actualPrice?: number;
   estimatedCost?: number;
   staffRates?: number[];
+  type?: 'client' | 'inhouse';
 }
 
 export const STAFF_NAMES = ['Sanjana','Senith','Sakuntha','Sandun','Dasuni','Prageeth'];
 export const STAGES = [
-  'Discovery & Planning', 'UI/UX Design', 'Frontend Development', 'Backend Development',
-  'CMS Development', 'Database & API', 'Testing & QA', 'Bug Fixing', 'Client Review & Revisions',
+  'Discovery & Planning', 'UI/UX Design', 'Frontend Development', 'Backend Development', 'Fullstack development', 'CMS Development', 'Database & API', 'Testing & QA', 'Bug Fixing', 'Client Review & Revisions',
   'Deployment & Launch', 'Project Management', 'Client Communication', 'Documentation', 'Other'
 ];
 export const STAGE_COLORS: Record<string, string> = {

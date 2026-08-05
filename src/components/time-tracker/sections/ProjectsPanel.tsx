@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Project, Entry, STAFF_NAMES } from '../types';
 import { api } from '@/lib/api';
 import { SectionWrapper } from '../../price-calculator/ui/SectionWrapper';
 import { SectionHeader } from '../../price-calculator/ui/SectionHeader';
 import { AlertMessage } from '../../price-calculator/ui/AlertMessage';
-import { Edit02Icon, Delete02Icon } from "hugeicons-react";
+import { Edit02Icon, Delete02Icon, Calculator01Icon } from "hugeicons-react";
 
 function getProjectEstHours(p: Project, staff?: string) {
   if (!p || !p.hours) return 0;
@@ -21,7 +21,19 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
   const [editName, setEditName] = useState('');
   const [editClient, setEditClient] = useState('');
   const [editStatus, setEditStatus] = useState('');
+  const [editActualPrice, setEditActualPrice] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+  const [showInhouse, setShowInhouse] = useState(false);
+
+  useEffect(() => {
+    if (editModalProject || deleteModalId) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [editModalProject, deleteModalId]);
+
   if (projects.length === 0) {
     return (
       <div className="space-y-8">
@@ -30,26 +42,44 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
     );
   }
 
-  const activeProjects = projects.filter(p => ['Confirmed','In Progress'].includes(p.status || ''));
-  const inactiveProjects = projects.filter(p => !['Confirmed','In Progress'].includes(p.status || ''));
+  const targetType = showInhouse ? 'inhouse' : 'client';
+  const filteredByType = projects.filter(p => (p.type || 'client') === targetType);
+  const activeProjects = filteredByType.filter(p => ['Confirmed','In Progress'].includes(p.status || ''));
+  const inactiveProjects = filteredByType.filter(p => !['Confirmed','In Progress'].includes(p.status || ''));
   const toShow = showInactive ? inactiveProjects : activeProjects;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-6">
-        <div className="text-sm text-zinc-400 font-medium">
-          Showing {toShow.length} {showInactive ? 'inactive' : 'active'} projects
+      <div className="flex flex-col xl:flex-row xl:justify-between items-start xl:items-center gap-4 mb-6">
+        <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 p-1 rounded-xl w-full xl:w-auto">
+          <button 
+            onClick={() => setShowInhouse(false)}
+            className={`flex-1 xl:flex-none px-6 py-2.5 text-xs font-bold rounded-lg transition-all ${!showInhouse ? 'bg-[#CCFF33] text-black shadow-lg shadow-[#CCFF33]/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+          >
+            Client Projects
+          </button>
+          <button 
+            onClick={() => setShowInhouse(true)}
+            className={`flex-1 xl:flex-none px-6 py-2.5 text-xs font-bold rounded-lg transition-all ${showInhouse ? 'bg-[#CCFF33] text-black shadow-lg shadow-[#CCFF33]/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+          >
+            Inhouse Projects
+          </button>
         </div>
-        <button 
-          onClick={() => setShowInactive(!showInactive)}
-          className={`px-4 py-2 text-xs font-bold rounded-lg border transition-colors ${showInactive ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-white'}`}
-        >
-          {showInactive ? 'View Active Projects' : 'View Inactive Projects'}
-        </button>
+        <div className="flex items-center justify-between xl:justify-end gap-4 w-full xl:w-auto bg-zinc-900 border border-zinc-800 p-2 rounded-xl">
+          <div className="text-sm text-zinc-400 font-medium px-2">
+            Showing {toShow.length} {showInactive ? 'inactive' : 'active'} projects
+          </div>
+          <button 
+            onClick={() => setShowInactive(!showInactive)}
+            className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${showInactive ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-transparent text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+          >
+            {showInactive ? 'View Active' : 'View Inactive'}
+          </button>
+        </div>
       </div>
 
       {toShow.length === 0 && (
-        <AlertMessage type="info" msg={`No ${showInactive ? 'inactive' : 'active'} projects found.`} />
+        <AlertMessage type="info" msg={`No ${showInactive ? 'inactive' : 'active'} ${targetType} projects found.`} />
       )}
 
       {toShow.map((p, i) => {
@@ -81,11 +111,20 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
               <div>
                 <h3 className="text-xl font-bold text-white flex items-center gap-3">
                   {p.name}
+                  {p.type !== 'inhouse' && (
+                    <button onClick={() => {
+                      localStorage.setItem('ngl_edit_project_id', p.id);
+                      window.dispatchEvent(new CustomEvent('ngl_navigate', { detail: 'price' }));
+                    }} className="text-zinc-500 hover:text-[#CCFF33] transition-colors p-1" title="Calculate Estimate">
+                      <Calculator01Icon className="w-4 h-4" />
+                    </button>
+                  )}
                   <button onClick={() => {
                     setEditModalProject(p);
                     setEditName(p.name);
                     setEditClient(p.client || '');
                     setEditStatus(p.status || 'Confirmed');
+                    setEditActualPrice(p.actualPrice ? p.actualPrice.toString() : '');
                   }} className="text-zinc-500 hover:text-blue-400 transition-colors p-1">
                     <Edit02Icon className="w-4 h-4" />
                   </button>
@@ -93,7 +132,28 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
                     <Delete02Icon className="w-4 h-4" />
                   </button>
                 </h3>
-                <div className="text-sm text-zinc-400 mt-1">{p.client||'No client'} <span className="mx-2">·</span> {p.status||'Unknown status'}</div>
+                <div className="text-sm text-zinc-400 mt-1 mb-2">{p.client||'No client'} <span className="mx-2">·</span> {p.status||'Unknown status'}</div>
+                {p.type !== 'inhouse' && (p.finalPrice !== undefined || (p.actualPrice !== undefined && !isNaN(Number(p.actualPrice)))) && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {p.finalPrice !== undefined && !isNaN(Number(p.finalPrice)) && (
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
+                        <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">System Quote</span>
+                        <span className={`font-bold ${p.actualPrice && !isNaN(Number(p.actualPrice)) && Math.round(Number(p.actualPrice)) !== Math.round(Number(p.finalPrice)) ? 'text-zinc-500 line-through' : 'text-white'}`}>
+                          LKR {Math.round(Number(p.finalPrice)).toLocaleString('en-US')}
+                        </span>
+                      </div>
+                    )}
+
+                    {p.actualPrice !== undefined && !isNaN(Number(p.actualPrice)) && Number(p.actualPrice) > 0 && Math.round(Number(p.actualPrice)) !== Math.round(Number(p.finalPrice || 0)) && (
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[#CCFF33]/10 border border-[#CCFF33]/30 text-xs">
+                        <span className="text-[#CCFF33]/80 font-semibold uppercase tracking-wider text-[10px]">Actual Given</span>
+                        <span className="font-bold text-[#CCFF33]">
+                          LKR {Math.round(Number(p.actualPrice)).toLocaleString('en-US')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <StatusTag />
             </div>
@@ -113,7 +173,15 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
                 <div className="text-xs text-zinc-500 mt-2">{pct}% of estimate used</div>
               </div>
             ) : (
-              <div className="text-sm text-zinc-400 mb-6">{totalLogged.toFixed(1)} hours logged · No estimate in planner</div>
+              <div className="mb-6">
+                <div className="flex justify-between items-end mb-3 text-sm">
+                  <span className="font-medium text-white">Hours: <span style={{color: '#CCFF33'}}>{totalLogged.toFixed(1)}</span> logged</span>
+                  <span className="text-xs text-zinc-400">Inhouse Project (No limit)</span>
+                </div>
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-4">
+                  <div className="h-full rounded-full bg-[#CCFF33] transition-all" style={{ width: '100%' }}></div>
+                </div>
+              </div>
             )}
 
             {(topStages.length > 0 || Object.keys(byStaff).length > 0) && (
@@ -173,8 +241,8 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
       })}
 
       {deleteModalId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setDeleteModalId(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-2xl font-bold text-white mb-2">Delete Project?</h3>
             <p className="text-zinc-400 mb-8">Are you sure you want to delete this project? This cannot be undone, though existing time entries will still keep the project name text.</p>
             <div className="flex justify-end gap-4">
@@ -190,8 +258,8 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
       )}
 
       {editModalProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setEditModalProject(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-2xl font-bold text-white mb-6">Edit Project</h3>
             
             <div className="space-y-4 mb-8">
@@ -213,13 +281,18 @@ export function ProjectsPanel({ entries, projects, saveProjects }: { entries: En
                   <option value="Cancelled">Cancelled</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Actual Given Price (LKR)</label>
+                <input type="number" placeholder="e.g. 280000" className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#CCFF33] transition-colors text-sm" value={editActualPrice} onChange={e => setEditActualPrice(e.target.value)} />
+              </div>
             </div>
 
             <div className="flex justify-end gap-4">
               <button onClick={() => setEditModalProject(null)} className="px-6 py-3 rounded-xl border border-zinc-700 text-white font-medium hover:bg-zinc-800 transition-colors">Cancel</button>
               <button onClick={() => {
                 if (!editName.trim() || !editClient.trim()) return alert('Name and Client are required.');
-                const updatedProj = { ...editModalProject, name: editName, client: editClient, status: editStatus };
+                const parsedPrice = parseFloat(editActualPrice);
+                const updatedProj = { ...editModalProject, name: editName, client: editClient, status: editStatus, actualPrice: isNaN(parsedPrice) ? undefined : parsedPrice };
                 saveProjects(projects.map(p => p.id === editModalProject.id ? updatedProj : p));
                 api.updateProject(updatedProj);
                 setEditModalProject(null);
