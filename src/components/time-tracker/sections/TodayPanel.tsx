@@ -30,7 +30,7 @@ export function TodayPanel({ entries }: { entries: Entry[] }) {
           <option value="">All staff</option>
           {STAFF_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <input type="date" className={inputClass} value={dateVal} onChange={e => setDateVal(e.target.value)} />
+        <input type="date" className={inputClass} style={{ colorScheme: 'dark' }} value={dateVal} onChange={e => setDateVal(e.target.value)} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

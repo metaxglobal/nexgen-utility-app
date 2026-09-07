@@ -1,5 +1,27 @@
 export const WEB_URL = "https://script.google.com/macros/s/AKfycbymvxpomXf6Pyvj609uO49R5mnLIKEmcp_2W34XDCwcGMnNZcpxxe_NQ791teHOP0zf2g/exec";
 
+const parseDateStr = (str: any) => {
+  if (typeof str !== 'string' || !str.includes('T')) return str;
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? str : d.toLocaleDateString('en-CA');
+};
+
+const parseTimeStr = (str: any) => {
+  if (typeof str !== 'string' || !str.includes('T')) return str;
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? str : d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+};
+
+const sanitizeEntries = (entries: any[]) => {
+  if (!Array.isArray(entries)) return [];
+  return entries.map(e => ({
+    ...e,
+    date: parseDateStr(e.date),
+    start: parseTimeStr(e.start),
+    end: parseTimeStr(e.end)
+  }));
+};
+
 export const api = {
   getAllData: async () => {
     try {
@@ -7,7 +29,7 @@ export const api = {
       const data = await res.json();
       return {
         projects: Array.isArray(data.projects) ? data.projects.reverse() : [],
-        entries: Array.isArray(data.entries) ? data.entries.reverse() : []
+        entries: sanitizeEntries(data.entries).reverse()
       };
     } catch (e) {
       console.warn("Network sync failed, relying on local cache.");
@@ -28,7 +50,7 @@ export const api = {
     try {
       const res = await fetch(`${WEB_URL}?action=getEntries`, { cache: 'no-store' });
       const data = await res.json();
-      return Array.isArray(data) ? data.reverse() : [];
+      return sanitizeEntries(data).reverse();
     } catch (e) {
       console.warn("Network sync failed, relying on local cache.");
       return [];
